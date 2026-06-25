@@ -1,0 +1,91 @@
+name: Node.js CI/CD to Amazon EKS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-cicd-eks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY: node-cicd-eks-github-actions
+  EKS_CLUSTER_NAME: node-cicd-eks-dev
+  KUSTOMIZE_OVERLAY: kustomize/overlays/dev
+
+jobs:
+  build-scan-deploy:
+    name: Build, Push, and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: app
+        run: npm test
+
+      - name: Run syntax check
+        working-directory: app
+        run: npm run lint
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Ensure ECR repository exists
+        run: |
+          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 ||           aws ecr create-repository --repository-name "$ECR_REPOSITORY" >/dev/null
+
+      - name: Build and push Docker image
+        id: image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build -t "$IMAGE_URI" ./app
+          docker push "$IMAGE_URI"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Configure kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig             --region "$AWS_REGION"             --name "$EKS_CLUSTER_NAME"
+
+      - name: Update deployment image
+        run: |
+          sed -i "s|image: .*|image: ${{ steps.image.outputs.image_uri }}|g" "$KUSTOMIZE_OVERLAY/deploy-dev.yaml"
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -k "$KUSTOMIZE_OVERLAY"
+          kubectl -n app-dev rollout status deployment/web-deployment --timeout=180s
+          kubectl -n app-dev get pods,svc,ingress
