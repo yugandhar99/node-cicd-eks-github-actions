@@ -1,0 +1,16 @@
+{
+    "name": "addition-app",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+    "test": "jest",
+    "lint": "node --check index.js"
+    },
+    "dependencies": {
+        "jest": "^29.6.1"
+      },
+    "keywords": [],
+    "author": "Yugandhar Ethamukkala",
+    "license": "MIT"
+    }
