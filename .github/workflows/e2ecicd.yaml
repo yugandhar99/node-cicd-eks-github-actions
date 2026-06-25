@@ -19,7 +19,7 @@ concurrency:
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   ECR_REPOSITORY: node-cicd-eks-github-actions
-  EKS_CLUSTER_NAME: node-cicd-eks-dev
+  EKS_CLUSTER_NAME: e2ecicd-eks-dev
   KUSTOMIZE_OVERLAY: kustomize/overlays/dev
 
 jobs:
