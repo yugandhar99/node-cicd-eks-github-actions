@@ -1,6 +1,4 @@
 name: Node.js CI/CD to Amazon EKS
-
-
 on:
   workflow_dispatch:
   
