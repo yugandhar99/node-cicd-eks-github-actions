@@ -1,4 +1,4 @@
-output "cluster_endpoint" {
+output "clus ter_endpoint" {
   description = "Endpoint for EKS control plane"
   value       = module.eks.cluster_endpoint
 }
